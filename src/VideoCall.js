@@ -77,6 +77,8 @@ function VideoCall({ roomId, onLeaveRoom }) {
         // Add tracks to peer connection
         localStreamRef.current?.getTracks().forEach((track) => {
           pc.addTrack(track, localStreamRef.current);
+          peerConnections.current[participantId].addTrack(track, localStreamRef.current);
+
         });
 
         // Create offer for new peer
