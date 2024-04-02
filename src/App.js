@@ -1,24 +1,31 @@
-import logo from './logo.svg';
-import './App.css';
+// src/App.js
+import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './AuthContext';
+import SignIn from './SignIn';
+import RoomEntry from './RoomEntry';
+import VideoCall from './VideoCall';
+
+function VideoRoomApp() {
+  const { currentUser } = useAuth();
+  const [roomId, setRoomId] = useState('');
+  const handleRoomLeave = () => {
+    window.location.reload();
+    setRoomId(''); // Reset roomId to navigate back to the main page
+  };
+  return (
+    <div>
+      {!currentUser && <SignIn />}
+      {currentUser && !roomId && <RoomEntry onRoomJoined={setRoomId} />}
+      {currentUser && roomId && <VideoCall roomId={roomId} onLeaveRoom={handleRoomLeave}/>}
+    </div>
+  );
+}
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <AuthProvider>
+      <VideoRoomApp />
+    </AuthProvider>
   );
 }
 
