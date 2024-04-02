@@ -157,13 +157,7 @@ function VideoCall({ roomId, onLeaveRoom }) {
   // Signaling - listening for offers/answers
   useEffect(() => {
     const offersRef = ref(database, `rooms/${roomId}/offers`);
-    const stopMonitoring = monitorAudioLevels(localStreamRef.current, () => {
-      // User is speaking
-      set(ref(database, `rooms/${roomId}/currentSpeaker`), currentUser.uid);
-    }, () => {
-      // User stopped speaking
-      set(ref(database, `rooms/${roomId}/currentSpeaker`), null);
-    });
+   
     onValue(offersRef, (snapshot) => {
       if (snapshot.exists()) {
         snapshot.forEach((childSnapshot) => {
@@ -210,9 +204,27 @@ function VideoCall({ roomId, onLeaveRoom }) {
     return () => {
       off(offersRef);
       off(answersRef);
-      stopMonitoring();
     };
   }, [roomId, currentUser.uid]);
+  useEffect(() => {
+    // Ensure stream is available before monitoring audio levels
+    if (!localStreamRef.current) {
+      return;
+    }
+  
+    const stopMonitoring = monitorAudioLevels(localStreamRef.current, () => {
+      // User is speaking
+      set(ref(database, `rooms/${roomId}/currentSpeaker`), currentUser.uid);
+    }, () => {
+      // User stopped speaking
+      set(ref(database, `rooms/${roomId}/currentSpeaker`), null);
+    });
+  
+    return () => {
+      stopMonitoring();
+    };
+  }, [roomId, currentUser.uid, localStreamRef.current]); // Add localStreamRef.current as a dependency
+  
   useEffect(() => {
     const currentSpeakerRef = ref(database, `rooms/${roomId}/currentSpeaker`);
     onValue(currentSpeakerRef, (snapshot) => {
