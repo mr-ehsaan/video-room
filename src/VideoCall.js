@@ -157,6 +157,13 @@ function VideoCall({ roomId, onLeaveRoom }) {
   // Signaling - listening for offers/answers
   useEffect(() => {
     const offersRef = ref(database, `rooms/${roomId}/offers`);
+    const stopMonitoring = monitorAudioLevels(localStreamRef.current, () => {
+      // User is speaking
+      set(ref(database, `rooms/${roomId}/currentSpeaker`), currentUser.uid);
+    }, () => {
+      // User stopped speaking
+      set(ref(database, `rooms/${roomId}/currentSpeaker`), null);
+    });
     onValue(offersRef, (snapshot) => {
       if (snapshot.exists()) {
         snapshot.forEach((childSnapshot) => {
@@ -203,14 +210,63 @@ function VideoCall({ roomId, onLeaveRoom }) {
     return () => {
       off(offersRef);
       off(answersRef);
+      stopMonitoring();
     };
   }, [roomId, currentUser.uid]);
+  useEffect(() => {
+    const currentSpeakerRef = ref(database, `rooms/${roomId}/currentSpeaker`);
+    onValue(currentSpeakerRef, (snapshot) => {
+      const speakerUid = snapshot.val();
+      // Update UI to highlight the current speaker
+      // This could involve setting state that your video component uses to show who is speaking
+    });
+  
+    return () => {
+      off(currentSpeakerRef);
+    };
+  }, [roomId]);
+  
 
   const toggleMute = () => {
     const currentlyEnabled = localStreamRef.current.getAudioTracks()[0].enabled;
     localStreamRef.current.getAudioTracks()[0].enabled = !currentlyEnabled;
     setIsMuted(!!currentlyEnabled);
   };
+
+  function monitorAudioLevels(stream, onSpeak, onSilence) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = audioContext.createAnalyser();
+    const microphone = audioContext.createMediaStreamSource(stream);
+    const javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+  
+    analyser.smoothingTimeConstant = 0.8;
+    analyser.fftSize = 1024;
+  
+    microphone.connect(analyser);
+    analyser.connect(javascriptNode);
+  
+    javascriptNode.connect(audioContext.destination);
+    javascriptNode.onaudioprocess = function() {
+      const array = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(array);
+      const arraySum = array.reduce((a, value) => a + value, 0);
+      const average = arraySum / array.length;
+      // Volume threshold to consider as speaking
+      if (average > 50) { 
+        onSpeak();
+      } else {
+        onSilence();
+      }
+    };
+  
+    // Return a cleanup function to stop monitoring
+    return () => {
+      microphone.disconnect();
+      javascriptNode.disconnect();
+      audioContext.close();
+    };
+  }
+  
 
   const stopMediaTracks = () => {
     localStreamRef.current?.getTracks().forEach((track) => {
