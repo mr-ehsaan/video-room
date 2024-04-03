@@ -22,6 +22,7 @@ function VideoCall({ roomId, onLeaveRoom }) {
   const localVideoRef = useRef();
   const remoteVideoRefs = useRef({});
   const localStreamRef = useRef();
+  const ownerIdRef = useRef();
 
   // ICE servers
   const iceServers = {
@@ -35,7 +36,9 @@ function VideoCall({ roomId, onLeaveRoom }) {
     // Get user's media
     const roomRef = ref(database, `rooms/${roomId}`);
     get(roomRef).then((snapshot) => {
+      ownerIdRef.current=snapshot.val().owner;
       if (snapshot.exists() && snapshot.val().owner === currentUser.uid) {
+
         setIsOwner(true);
       }
     });
@@ -66,7 +69,10 @@ function VideoCall({ roomId, onLeaveRoom }) {
   // Handle participants joining or leaving
   function handleParticipantsChanged(participantsList) {
     // Add new participants
+    const isOwner = currentUser.uid === ownerIdRef.current;
+    console.log("isOwner >>", isOwner)
     participantsList.forEach((participantId) => {
+      
       if (
         !peerConnections.current[participantId] &&
         participantId !== currentUser.uid
@@ -77,28 +83,31 @@ function VideoCall({ roomId, onLeaveRoom }) {
         // Add tracks to peer connection
         localStreamRef.current?.getTracks().forEach((track) => {
           pc.addTrack(track, localStreamRef.current);
-          peerConnections.current[participantId].addTrack(track, localStreamRef.current);
-
         });
-
+        console.log("handleParticipantsChanged>>", "participantId > currentUser.uid >>", participantId ,"participantId", currentUser.uid, parseInt(participantId, 10) > parseInt(currentUser.uid, 10))
+        
         // Create offer for new peer
-        if (participantId > currentUser.uid) {
+        if (isOwner) {
           pc.createOffer().then((offer) => {
             pc.setLocalDescription(offer);
             const offerRef = ref(
               database,
               `rooms/${roomId}/offers/${participantId}`
-            );
-            set(offerRef, {
-              sdp: offer.sdp,
-              type: offer.type,
-              from: currentUser.uid,
+              );
+              set(offerRef, {
+                sdp: offer.sdp,
+                type: offer.type,
+                from: currentUser.uid,
+              });
             });
-          });
-        }
+          }
+
+
+
 
         // Handle remote stream
         pc.ontrack = (event) => {
+          console.log('Received Tracks:', event.streams[0].getTracks());
           if (remoteVideoRefs.current[participantId]) {
             remoteVideoRefs.current[participantId].srcObject = event.streams[0];
           }
@@ -130,6 +139,7 @@ function VideoCall({ roomId, onLeaveRoom }) {
     );
 
     pc.onicecandidate = (event) => {
+      console.log('Local ICE candidate: ', event.candidate);
       if (event.candidate) {
         const newCandidateRef = push(iceCandidatesRef);
         set(newCandidateRef, event.candidate.toJSON());
@@ -156,15 +166,28 @@ function VideoCall({ roomId, onLeaveRoom }) {
     };
   }
 
+  function findPeerConnectionKey(participantId) {
+    // Implement the logic to find the correct key based on participantId
+    // This could be a direct match or some custom logic if needed
+    console.log("Object.keys >>", Object.keys(peerConnections.current)," >>participantId >>", participantId)
+    return Object.keys(peerConnections.current).find(key => key === participantId);
+  }
   // Signaling - listening for offers/answers
   useEffect(() => {
     const offersRef = ref(database, `rooms/${roomId}/offers`);
-   
     onValue(offersRef, (snapshot) => {
+      const snapshotValue=snapshot.val();
+      const keyValue= snapshotValue && Object.keys(snapshotValue);
+      console.log("snapshot >>", keyValue)
       if (snapshot.exists()) {
         snapshot.forEach((childSnapshot) => {
+
+          console.log("childSnapshot >>",childSnapshot )
           const data = childSnapshot.val();
-          const pc = peerConnections.current[data.from];
+          const pcKey = findPeerConnectionKey(data.from);
+          const pc = peerConnections.current[keyValue[0]];
+        
+          console.log("pc >>>>", pc,"peerConnections >>", peerConnections.current, "data.from >>", data , "pcKey >>", pcKey)
           if (data.type === "offer" && pc.signalingState !== "stable") {
             pc.setRemoteDescription(new RTCSessionDescription(data))
               .then(() => {
@@ -208,79 +231,12 @@ function VideoCall({ roomId, onLeaveRoom }) {
       off(answersRef);
     };
   }, [roomId, currentUser.uid]);
-  useEffect(() => {
-    // Ensure stream is available before monitoring audio levels
-    if (!localStreamRef.current) {
-      return;
-    }
-  
-    const stopMonitoring = monitorAudioLevels(localStreamRef.current, () => {
-      // User is speaking
-      set(ref(database, `rooms/${roomId}/currentSpeaker`), currentUser.uid);
-    }, () => {
-      // User stopped speaking
-      set(ref(database, `rooms/${roomId}/currentSpeaker`), null);
-    });
-  
-    return () => {
-      stopMonitoring();
-    };
-  }, [roomId, currentUser.uid, localStreamRef.current]); // Add localStreamRef.current as a dependency
-  
-  useEffect(() => {
-    const currentSpeakerRef = ref(database, `rooms/${roomId}/currentSpeaker`);
-    onValue(currentSpeakerRef, (snapshot) => {
-      const speakerUid = snapshot.val();
-      // Update UI to highlight the current speaker
-      // This could involve setting state that your video component uses to show who is speaking
-    });
-  
-    return () => {
-      off(currentSpeakerRef);
-    };
-  }, [roomId]);
-  
 
   const toggleMute = () => {
     const currentlyEnabled = localStreamRef.current.getAudioTracks()[0].enabled;
     localStreamRef.current.getAudioTracks()[0].enabled = !currentlyEnabled;
     setIsMuted(!!currentlyEnabled);
   };
-
-  function monitorAudioLevels(stream, onSpeak, onSilence) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const analyser = audioContext.createAnalyser();
-    const microphone = audioContext.createMediaStreamSource(stream);
-    const javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-  
-    analyser.smoothingTimeConstant = 0.8;
-    analyser.fftSize = 1024;
-  
-    microphone.connect(analyser);
-    analyser.connect(javascriptNode);
-  
-    javascriptNode.connect(audioContext.destination);
-    javascriptNode.onaudioprocess = function() {
-      const array = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(array);
-      const arraySum = array.reduce((a, value) => a + value, 0);
-      const average = arraySum / array.length;
-      // Volume threshold to consider as speaking
-      if (average > 50) { 
-        onSpeak();
-      } else {
-        onSilence();
-      }
-    };
-  
-    // Return a cleanup function to stop monitoring
-    return () => {
-      microphone.disconnect();
-      javascriptNode.disconnect();
-      audioContext.close();
-    };
-  }
-  
 
   const stopMediaTracks = () => {
     localStreamRef.current?.getTracks().forEach((track) => {
