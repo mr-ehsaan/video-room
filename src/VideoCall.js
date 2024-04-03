@@ -185,6 +185,7 @@ function VideoCall({ roomId, onLeaveRoom }) {
           const pcKey = findPeerConnectionKey(data.from);
           const pc = peerConnections.current[keyValue[0]];
           console.log("pc >><<<<<<>> ", pc)
+          console.log("keyValue >><<<<<<>> ", keyValue)
           if (data.type === "offer" && pc.signalingState === "stable") {
             pc.setRemoteDescription(new RTCSessionDescription(data))
               .then(() => {
@@ -214,10 +215,26 @@ function VideoCall({ roomId, onLeaveRoom }) {
       database,
       `rooms/${roomId}/answers/${currentUser.uid}`
     );
+    const participants = ref(
+      database,
+      `rooms/${roomId}/participants`
+    );
+    
     onValue(answersRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const pc = peerConnections.current[data.to];
+        let objKey=null;
+        onValue(participants, (snapshot)=>{
+      
+          snapshot.forEach((v)=>{
+            if(v.val().uid!==data.to){
+              objKey= v.key;
+            }
+          })
+    
+        })
+        const pc = peerConnections.current[objKey];
+        console.log("peerConnections >>>", peerConnections, "pc >>", pc)
         if (pc.signalingState !== "stable") {
           pc.setRemoteDescription(new RTCSessionDescription(data));
         }
@@ -227,6 +244,14 @@ function VideoCall({ roomId, onLeaveRoom }) {
     return () => {
       off(offersRef);
       off(answersRef);
+        localStreamRef.current?.getTracks().forEach((track) => track.stop());
+        // Close each peer connection
+        Object.keys(peerConnections.current).forEach(key => {
+          const pc = peerConnections.current[key];
+          if (pc.signalingState !== "closed") {
+            pc.close();
+          }
+        });
     };
   }, [roomId, currentUser.uid]);
 
@@ -265,7 +290,7 @@ function VideoCall({ roomId, onLeaveRoom }) {
 
     onLeaveRoom();
   };
-
+console.log("participants >>", participants)
   const deleteRoom = async () => {
     await remove(ref(database, `rooms/${roomId}`));
     onLeaveRoom();
