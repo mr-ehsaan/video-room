@@ -178,22 +178,20 @@ function VideoCall({ roomId, onLeaveRoom }) {
     onValue(offersRef, (snapshot) => {
       const snapshotValue=snapshot.val();
       const keyValue= snapshotValue && Object.keys(snapshotValue);
-      console.log("snapshot >>", keyValue)
       if (snapshot.exists()) {
         snapshot.forEach((childSnapshot) => {
 
-          console.log("childSnapshot >>",childSnapshot )
           const data = childSnapshot.val();
           const pcKey = findPeerConnectionKey(data.from);
           const pc = peerConnections.current[keyValue[0]];
-        
-          console.log("pc >>>>", pc,"peerConnections >>", peerConnections.current, "data.from >>", data , "pcKey >>", pcKey)
-          if (data.type === "offer" && pc.signalingState !== "stable") {
+          console.log("pc >><<<<<<>> ", pc)
+          if (data.type === "offer" && pc.signalingState === "stable") {
             pc.setRemoteDescription(new RTCSessionDescription(data))
               .then(() => {
                 return pc.createAnswer();
               })
               .then((answer) => {
+
                 return pc.setLocalDescription(answer);
               })
               .then(() => {
