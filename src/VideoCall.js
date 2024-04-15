@@ -227,7 +227,7 @@ function VideoCall({ roomId, onLeaveRoom }) {
         onValue(participants, (snapshot)=>{
       
           snapshot.forEach((v)=>{
-            if(v.val().uid!==data.to){
+            if(v.val().uid===data.to){
               objKey= v.key;
             }
           })

@@ -1,4 +1,3 @@
-// src/App.js
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './AuthContext';
 import SignIn from './SignIn';
@@ -10,7 +9,7 @@ function VideoRoomApp() {
   const [roomId, setRoomId] = useState('');
   const handleRoomLeave = () => {
     window.location.reload();
-    setRoomId(''); // Reset roomId to navigate back to the main page
+    setRoomId('');
   };
   return (
     <div>

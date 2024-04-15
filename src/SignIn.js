@@ -9,20 +9,16 @@ function SignIn() {
   const signInWithGoogle = () => {
     const provider = new GoogleAuthProvider();
     signInWithPopup(auth, provider).then((result) => {
-      // Handle successful sign-in.
       console.log(result.user);
     }).catch((error) => {
-      // Handle errors here.
       console.error(error);
     });
   };
 
   const handleSignOut = () => {
     signOut(auth).then(() => {
-      // Sign-out successful.
       console.log("Sign out successful");
     }).catch((error) => {
-      // An error happened.
       console.error("Sign out error", error);
     });
   };
